@@ -26,58 +26,24 @@
 #include <atomic>
 #include <functional>
 #include <sstream>
+#include <algorithm>
 
 #include "yijinjing/journal/Page.h"
 #include "yijinjing/journal/PageSocketStruct.h"
 #include "yijinjing/journal/PageUtil.h"
 #include "yijinjing/journal/Timer.h"
 #include "yijinjing/utils/Hash.hpp"
-#include "spdlog/sinks/basic_file_sink.h"
-#include "spdlog/sinks/stdout_sinks.h"
 
 USING_YJJ_NAMESPACE
 
 const int INTERVAL_IN_MILLISEC = 1000000;
 
-using spdlog::logger;
-std::shared_ptr<spdlog::logger> get_console_logger(const std::string& path,
-                                                   const std::string& logger_name) {
-  auto console_logger = spdlog::get(logger_name);
-  if (!console_logger) {
-    std::string filename(path);
-    filename += logger_name;
-    filename += ".log";
-
-    std::vector<spdlog::sink_ptr> sinks;
-    auto console_sink = std::make_shared<spdlog::sinks::stdout_sink_mt>();
-    console_sink->set_level(spdlog::level::info);
-    sinks.push_back(console_sink);
-
-    auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(filename);
-    file_sink->set_level(spdlog::level::trace);
-    sinks.push_back(file_sink);
-
-    console_logger =
-        std::make_shared<spdlog::logger>(logger_name, std::begin(sinks), std::end(sinks));
-
-    spdlog::register_logger(console_logger);
-
-    console_logger->set_level(spdlog::level::trace);
-    console_logger->flush_on(spdlog::level::warn);
-
-    spdlog::set_default_logger(console_logger);
-  }
-  return console_logger;
-}
-
 std::atomic<bool> is_task_running(true);
 
 void signal_callback(int signum) {
   if (is_task_running.load(std::memory_order_relaxed)) {
-    spdlog::info("PageEngine Caught signal: {}, stopping...", signum);
     is_task_running.store(false);
   } else {
-    spdlog::info("PageEngine Caught signal: {}, exit.", signum);
     exit(signum);
   }
 }
@@ -102,9 +68,7 @@ PageEngine::PageEngine(const string& commFileName, const std::string& temp_page_
       commFreq(500),
       comm_running(false),
       task_temppage(new PstTempPage(this, temp_page_file)) {
-  // setup logger
-  logger = get_console_logger(logger_path, "PageEngine");  /// KfLog::getLogger("PageEngine");
-
+  
   // setup signal related static issue
   //   static_logger = logger;
 
@@ -158,12 +122,10 @@ void PageEngine::start(int cpu_id) {
 
 void PageEngine::set_task_freq(double secondFreq) {
   taskFreq = (int)(secondFreq * MICROSECONDS_PER_SECOND);
-  spdlog::info("task frequency updated to {} microsecond", taskFreq);
 }
 
 void PageEngine::set_comm_freq(double secondFreq) {
   commFreq = (int)(secondFreq * MICROSECONDS_PER_SECOND);
-  spdlog::info("comm frequency updated to {} microsecond", commFreq);
 }
 
 void PageEngine::stop() { is_task_running.store(false); }
@@ -190,7 +152,6 @@ void PageEngine::stop_all() {
 }
 
 void PageEngine::start_task() {
-  spdlog::info("(startTasks) (microseconds) {}", taskFreq);
   while (is_task_running.load(std::memory_order_relaxed)) {
     acquire_mutex();
     for (auto item : tasks) {
@@ -199,7 +160,6 @@ void PageEngine::start_task() {
     release_mutex();
     usleep(taskFreq);
   }
-  spdlog::info("(stopTask) done");
   stop_all();
 }
 
@@ -208,7 +168,6 @@ bool PageEngine::add_task(const PstBasePtr& task) {
   string name = task->getName();
   bool exits = (tasks.find(name) != tasks.end());
   tasks[name] = task;
-  spdlog::info("(addTask) (name) {} (exits) {}", name, (int)exits);
   release_mutex();
   return !exits;
 }
@@ -227,9 +186,6 @@ bool PageEngine::remove_task_by_name(const string& taskName) {
     flag = true;
   }
   release_mutex();
-  if (flag) {
-    spdlog::info("(rmTask) (name) {}", taskName);
-  }
   return flag;
 }
 
@@ -242,7 +198,6 @@ int PageEngine::reg_journal(const string& clientName) {
     if (GET_COMM_MSG(commBuffer, idx)->status == PAGED_COMM_RAW) break;
 
   if (idx >= MAX_COMM_USER_NUMBER) {
-    spdlog::info("cannot allocate idx in commFile");
     return -1;
   }
   if (idx > maxIdx) maxIdx = idx;
@@ -252,19 +207,15 @@ int PageEngine::reg_journal(const string& clientName) {
   msg->last_page_num = 0;
   auto it = clientJournals.find(clientName);
   if (it == clientJournals.end()) {
-    spdlog::info("cannot find the client in reg_journal");
     return -1;
   }
   it->second.user_index_vec.push_back(idx);
-  spdlog::info("[RegJournal] (client) {} (idx) {}", clientName, idx);
   return idx;
 }
 
 bool PageEngine::reg_client(string& _commFile, int& fileSize, int& hashCode,
                             const string& clientName, int pid, bool isWriter) {
-  spdlog::info("[RegClient] (name) {} (pid) {} (writer?) {}", clientName, pid, isWriter);
   if (clientJournals.find(clientName) != clientJournals.end()) {
-    spdlog::info("Client already registered (name)", clientName);
     return false;
   }
 
@@ -294,20 +245,15 @@ bool PageEngine::reg_client(string& _commFile, int& fileSize, int& hashCode,
 }
 
 void PageEngine::release_page(const PageCommMsg& msg) {
-  spdlog::info("[RmPage] (folder) {} (jname) {} (pNum) {} (lpNum) {}", msg.folder, msg.name,
-               msg.page_num, msg.last_page_num);
-
   map<PageCommMsg, int>::iterator count_it;
   if (msg.is_writer) {
     count_it = fileWriterCounts.find(msg);
     if (count_it == fileWriterCounts.end()) {
-      spdlog::info("cannot find key at fileWriterCounts in exit_client");
       return;
     }
   } else {
     count_it = fileReaderCounts.find(msg);
     if (count_it == fileReaderCounts.end()) {
-      spdlog::info("cannot find key at fileReaderCounts in exit_client");
       return;
     }
   }
@@ -326,7 +272,6 @@ void PageEngine::release_page(const PageCommMsg& msg) {
       auto file_it = fileAddrs.find(path);
       if (file_it != fileAddrs.end()) {
         void* addr = file_it->second;
-        spdlog::info("[AddrRm] (path) {} (addr) {}", path, addr);
         PageUtil::ReleasePageBuffer(addr, JOURNAL_PAGE_SIZE, true);
         fileAddrs.erase(file_it);
       }
@@ -335,9 +280,6 @@ void PageEngine::release_page(const PageCommMsg& msg) {
 }
 
 byte PageEngine::initiate_page(const PageCommMsg& msg) {
-  spdlog::info("[InPage] (folder) {} (jname) {} (pNum) {} (lpNum) {}", msg.folder, msg.name,
-               msg.page_num, msg.last_page_num);
-
   string path = PageUtil::GenPageFullPath(msg.folder, msg.name, msg.page_num);
   const string temp_full_path = task_temppage->getPath();
   if (fileAddrs.find(path) == fileAddrs.end()) {
@@ -350,10 +292,8 @@ byte PageEngine::initiate_page(const PageCommMsg& msg) {
         if (tempPageIter != fileAddrs.end()) {
           int ret = rename(temp_full_path.c_str(), path.c_str());
           if (ret < 0) {
-            spdlog::info("[InPage] ERROR: Cannot rename from {} to {}", temp_full_path, path);
             return PAGED_COMM_CANNOT_RENAME_FROM_TEMP;
           } else {
-            spdlog::info("[InPage] TEMP_POOL: {} to {}", temp_full_path, path);
             buffer = tempPageIter->second;
             fileAddrs.erase(tempPageIter);
           }
@@ -365,7 +305,6 @@ byte PageEngine::initiate_page(const PageCommMsg& msg) {
       buffer = PageUtil::LoadPageBuffer(path, JOURNAL_PAGE_SIZE, false, true);
     }
 
-    spdlog::info("[AddrAdd] (path) {} (addr) {}", path, buffer);
     fileAddrs[path] = buffer;
   }
 
@@ -390,8 +329,6 @@ void PageEngine::exit_client(const string& clientName, int hashCode, bool needHa
   if (it == clientJournals.end()) return;
   PageClientInfo& info = it->second;
   if (needHashCheck && hashCode != info.hash_code) {
-    spdlog::info("[RmClient] HASH FAILED.. (name) {} (serverHash) {} (clientHash) {}", clientName,
-                 info.hash_code, hashCode);
     return;
   }
 
@@ -400,8 +337,6 @@ void PageEngine::exit_client(const string& clientName, int hashCode, bool needHa
     if (msg->status == PAGED_COMM_ALLOCATED) release_page(*msg);
     msg->status = PAGED_COMM_RAW;
   }
-  spdlog::info("[RmClient] (name) {} (start) {} (end) {}", clientName, info.reg_nano,
-               getNanoTime());
   vector<string>& clients = pidClient[info.pid];
   clients.erase(remove(clients.begin(), clients.end(), clientName), clients.end());
   if (clients.size() == 0) pidClient.erase(info.pid);
@@ -410,21 +345,14 @@ void PageEngine::exit_client(const string& clientName, int hashCode, bool needHa
 
 void PageEngine::start_comm(int cpu_id) {
   if (cpu_id > 0) {
-    if (cpu_set_affinity(cpu_id)) {
-      spdlog::info("set cpu_id {} successfully.", cpu_id);
-    } else {
-      spdlog::info("set cpu_id {} failed.", cpu_id);
-    }
+    cpu_set_affinity(cpu_id);
   }
 
   const int comm_freq = commFreq;
-  spdlog::info("(startTasks) (microseconds) {}", comm_freq);
   comm_running = true;
   for (size_t idx = 0; comm_running; idx = (idx + 1) % (maxIdx + 1)) {
     PageCommMsg* msg = GET_COMM_MSG(commBuffer, idx);
     if (msg->status == PAGED_COMM_REQUESTING) {
-      spdlog::info("[Demand] (idx) {}", idx);
-
       acquire_mutex();
       if (msg->last_page_num > 0 && msg->last_page_num != msg->page_num) {
         short curPage = msg->page_num;

@@ -36,15 +36,12 @@
 
 #include "yijinjing/utils/YJJ_DECLARE.h"
 #include "yijinjing/journal/PageSocketStruct.h"
-#include "spdlog/spdlog.h"
 
 YJJ_NAMESPACE_START
 
 /** utilities for socket usage */
 class IPageSocketUtil {
  public:
-  /** return logger */
-  virtual std::shared_ptr<spdlog::logger> get_logger() const = 0;
   /** return journal index in comm file */
   virtual int reg_journal(const string& clientName) = 0;
   /** return true if this client exists, and fill in commfile, size of commfile, hash code of this
@@ -64,8 +61,6 @@ class PageSocketHandler : public std::enable_shared_from_this<PageSocketHandler>
  private:
   /** flag for io running */
   bool io_running;
-  /** logger, from paged */
-  std::shared_ptr<spdlog::logger> logger;
   /** util as page engine */
   IPageSocketUtil* util;
   /** singleton */

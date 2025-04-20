@@ -32,7 +32,6 @@
 
 #include "yijinjing/journal/PageSocketHandler.h"
 #include "yijinjing/paged/PageServiceTask.h"
-#include "spdlog/spdlog.h"
 
 YJJ_NAMESPACE_START
 
@@ -115,7 +114,6 @@ class PageEngine : public IPageSocketUtil {
 
  public:
   // functions required by IPageSocketUtil
-  std::shared_ptr<spdlog::logger> get_logger() const { return logger; }
   int reg_journal(const string& clientName);
   bool reg_client(string& commFile, int& fileSize, int& hashCode, const string& clientName, int pid,
                   bool isWriter);
@@ -125,7 +123,6 @@ class PageEngine : public IPageSocketUtil {
 
  private:
   /// KfLogPtr logger;    /**< logger */
-  std::shared_ptr<spdlog::logger> logger;
   void* commBuffer; /**< comm memory */
   string commFile;  /**< comm file linked to memory */
 

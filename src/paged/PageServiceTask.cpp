@@ -46,7 +46,6 @@ void PstPidCheck::go() {
       ss << "/proc/" << pid;
       if (stat(ss.str().c_str(), &sts) == -1 && errno == ENOENT) {
         for (auto const &name : item.second) {
-          SPDLOG_WARN("process {} with pid {} exited", name, pid);
           clientsToRemove.push_back(name);
         }
       }
@@ -63,7 +62,6 @@ PstTempPage::PstTempPage(PageEngine *pe, const string &temp_page_path)
 void PstTempPage::go() {
   auto &fileAddrs = engine->fileAddrs;
   if (fileAddrs.find(PageFullPath) == fileAddrs.end()) {
-    engine->get_logger()->info("NEW TEMP PAGE: {}", PageFullPath);
     void *buffer = PageUtil::LoadPageBuffer(PageFullPath, JOURNAL_PAGE_SIZE, true, true);
     if (buffer != nullptr) {
       fileAddrs[PageFullPath] = buffer;

@@ -9,15 +9,10 @@ SET(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE INTERNAL "")
 
 FILE(GLOB TARGET_CPP "src/*/*.cpp")
 
-SET(INCS ${CMAKE_CURRENT_SOURCE_DIR}/include
-         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/include/spdlog-1.11.0
-         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/include/pybind11-2.2.4)
-SET(LNKS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/lib)
+SET(INCS ${CMAKE_CURRENT_SOURCE_DIR}/include)
 INCLUDE_DIRECTORIES(${INCS})
-LINK_DIRECTORIES(${LNKS})
 
-SET(LIBS spdlog
-         pthread
+SET(LIBS pthread
          stdc++fs)
 
 ADD_LIBRARY(FlashStore SHARED ${TARGET_CPP})
